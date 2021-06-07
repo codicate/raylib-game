@@ -1,3 +1,6 @@
+# custom
+cmake-build-*/
+
 # Prerequisites
 *.d
 
