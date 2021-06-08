@@ -5,12 +5,9 @@ Game made with C++ and raylib
 ### Getting Started
 
 ```bash
-# clone repo
-git clone https://github.com/codicate/raylib-game
+# clone repo & install submodules
+git clone https://github.com/codicate/raylib-game --recursive --shallow-submodules
 cd raylib-game
-
-# install raylib-cpp & raylib
-make submodules
 
 # setup include & lib folders
 make setup
