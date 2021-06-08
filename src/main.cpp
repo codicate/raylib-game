@@ -1,4 +1,4 @@
-﻿#include "include/raylib-cpp.hpp"
+﻿#include "raylib-cpp.hpp"
 
 #include <iostream>
 using namespace std;
@@ -11,7 +11,7 @@ int main()
   raylib::Window window(screenWidth, screenHeight, "raylib game - Henry Liu");
   SetTargetFPS(60);
 
-  raylib::Rectangle player(0, 0, 20, 150);
+  raylib::Rectangle player(200, 100, 100, 150);
 
   while (!window.ShouldClose())
   {
@@ -31,7 +31,7 @@ int main()
       player.SetPosition(normalizedInputVector * 10 + player.GetPosition());
     }
 
-    player.Draw(GOLD);
+    player.Draw(BLUE);
 
     EndDrawing();
   }
