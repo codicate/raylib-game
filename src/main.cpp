@@ -177,6 +177,8 @@ public:
 class Player : public Entity
 {
 public:
+  raylib::Vector2 velocity = {0, 0};
+
   Player(
     std::string name,
     raylib::Color color,
@@ -198,12 +200,21 @@ public:
     if (!(inputVector == raylib::Vector2(0, 0)))
     {
       raylib::Vector2 normalizedInputVector(inputVector.Normalize());
-      DrawText(("normalizedInputVector: " + std::to_string(normalizedInputVector.x) + " "
-        + std::to_string(normalizedInputVector.y)).c_str(), 0, 0, 10, GOLD);
-      body.SetPosition(normalizedInputVector * 10 + body.GetPosition());
+      velocity = velocity.MoveTowards(normalizedInputVector * 40, 1.0);
+    } else {
+      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), 0.5);
     }
 
-    if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+    body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
+
+    DrawText(("normalizedInputVector: " + std::to_string(body.x) + " "
+      + std::to_string(body.y)).c_str(), 0, 0, 10, GOLD);
+
+    raylib::Vector2 test = (raylib::Vector2)(raylib::Vector2(0.0, 0.0).MoveTowards({0.0, 0.0}, 10.0));
+//    DrawText((std::to_string(test.x) + " " + std::to_string(test.y)).c_str(), 0, 120, 10, RED);
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    {
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
 
       Projectile newProjectile(
@@ -249,7 +260,7 @@ int main()
     player.spawn();
     enemy.spawn();
 
-    for (auto& projectile : projectileList)
+    for (auto &projectile : projectileList)
     {
       projectile.spawn();
     }
