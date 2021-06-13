@@ -170,22 +170,9 @@ public:
   {
     Entity::spawn();
 
-    raylib::Vector2 normalizedDirection(direction.Normalize());
-
-//    int angle = atan2(normalizedDirection.y, normalizedDirection.x);
-//    raylib::Vector2(cos(angle), sin(angle));
-//    float radians_to_angles(float radians) {
-//      return (radians * 180.0f/M_PI);
-//    }
-
-    body.SetPosition(normalizedDirection * speed + body.GetPosition());
-
-    DrawText(("num of projectile: " + std::to_string((body.GetPosition()).x) + " " + std::to_string((body.GetPosition()).y)  ).c_str(), 0, 50, 10, GREEN);
+    body.SetPosition(direction * speed + body.GetPosition());
   }
 };
-
-
-
 
 class Player : public Entity
 {
@@ -216,18 +203,18 @@ public:
       body.SetPosition(normalizedInputVector * 10 + body.GetPosition());
     }
 
-    if (IsKeyDown(KEY_SPACE))
-    {
+    if(IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+      raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
+
       Projectile newProjectile(
         GOLD,
         raylib::Rectangle(body.x, body.y, 10, 5),
         {&hostileCollisionGroup},
         10,
-        raylib::Vector2(10, 10)
+        normalizedDirection
       );
 
       projectileList.push_back(newProjectile);
-      DrawText(("num of projectile: " + std::to_string(projectileList.size())).c_str(), 0, 60, 10, GREEN);
     }
   }
 };
