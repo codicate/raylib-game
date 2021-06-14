@@ -82,7 +82,7 @@ public:
 
   void despawn()
   {
-    //
+    // loop every `belongingCollisionGroup` and remove self, saving unnecessary scans
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
       auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
@@ -120,7 +120,9 @@ public:
     direction(direction),
     lifetime(lifetime)
   {
+    // record the time when the projectile is constructed to be used for despawning
     spawnStartTime = clock();
+    // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
     projectileList.push_back(this);
   }
 
@@ -130,12 +132,15 @@ public:
 
     body.SetPosition(direction * speed + body.GetPosition());
 
+    // Find the time passed since the projectile was first constructed
     double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
     DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
 
     if (timePassed >= lifetime)
     {
       Entity::despawn();
+
+      // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
       auto position = std::find(projectileList.begin(), projectileList.end(), this);
       projectileList.erase(position);
       delete (this);
@@ -146,6 +151,8 @@ public:
 class Subject : public Entity
 {
 public:
+  // since subject will move naturally with acceleration and deceleration, its velocity needs to be stored
+  raylib::Vector2 velocity = {0, 0};
   int health;
   int damage;
 
@@ -179,7 +186,7 @@ public:
 class Player : public Subject
 {
 public:
-  raylib::Vector2 velocity = {0, 0};
+  // The initial player position offset from the viewport origin, which will be used to calculate global mouse position, or the mouse position relational to the view port origin
   raylib::Vector2 mouseInitialOffset;
 
   Player(
@@ -223,18 +230,26 @@ public:
       (float) (IsKeyDown(KEY_S) - IsKeyDown(KEY_W))
     );
 
+    // if any key is pressed
     if (!(inputVector == raylib::Vector2(0, 0)))
     {
+      // normalize the vector so that the object will not move faster diagonally
       raylib::Vector2 normalizedInputVector(inputVector.Normalize());
+      // gradually gaining velocity towards `maxSpeed` by `acceleration`
       velocity = velocity.MoveTowards(normalizedInputVector * maxSpeed, acceleration);
     }
     else
     {
+      // gradually losing velocity towards stopping point by `deceleration`
       velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
     }
 
-    body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
+    body.SetPosition(velocity + body.GetPosition());
+
+    // camera follows player
     camera->target = body.GetPosition();
+
+    // find and set the actual global mouse position offset relational to viewport origin by subtracting player offset from viewport origin
     raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body.GetPosition();
     SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
@@ -243,8 +258,10 @@ public:
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
+      // find the direction in form of vector of the direction of mouse click relational to the player
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
 
+      // create new projectile near the player
       new Projectile(
         GOLD,
         raylib::Rectangle(body.x, body.y, 10, 5),
@@ -279,7 +296,7 @@ int main()
     "enemy", RED,
     raylib::Rectangle(200, 300, 100, 150),
     {&hostileCollisionGroup},
-    {&playerCollisionGroup}
+    {&playerCollisionGroup, &environmentCollisionGroup}
   );
 
   SetTargetFPS(60);
