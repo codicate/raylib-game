@@ -1,6 +1,5 @@
 ﻿#include "raylib-cpp.hpp"
 #include<iostream>
-#include <cmath>
 #include <vector>
 
 const int screenWidth = 800;
@@ -133,6 +132,11 @@ public:
 
   void spawn()
   {
+    const float maxSpeed = 30.0;
+    const float acceleration = 1.0;
+    const float deceleration = 2.0;
+    const float projectileSpeed = 20.0;
+
     Entity::spawn();
 
     raylib::Vector2 inputVector(
@@ -143,11 +147,11 @@ public:
     if (!(inputVector == raylib::Vector2(0, 0)))
     {
       raylib::Vector2 normalizedInputVector(inputVector.Normalize());
-      velocity = velocity.MoveTowards(normalizedInputVector * 40, 1.0);
+      velocity = velocity.MoveTowards(normalizedInputVector * maxSpeed, acceleration);
     }
     else
     {
-      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), 2.0);
+      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
     }
 
     body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
@@ -158,19 +162,15 @@ public:
     DrawText(("player position: " + std::to_string(body.x) + " "
       + std::to_string(body.y)).c_str(), 0, 0, 10, GOLD);
 
-    DrawText(("mouse position: " + std::to_string((raylib::Vector2(GetMousePosition())).x) + " "
-      + std::to_string((raylib::Vector2(GetMousePosition())).y)).c_str(), 0, 20, 10, BLUE);
-
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
-
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
 
       Projectile newProjectile(
         GOLD,
         raylib::Rectangle(body.x, body.y, 10, 5),
         {&hostileCollisionGroup},
-        10,
+        projectileSpeed,
         normalizedDirection
       );
 
