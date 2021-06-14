@@ -178,6 +178,7 @@ class Player : public Entity
 {
 public:
   raylib::Vector2 velocity = {0, 0};
+  raylib::Camera2D camera;
 
   Player(
     std::string name,
@@ -186,6 +187,8 @@ public:
     CollisionGroup scanningCollisionGroups
   ) : Entity(name, color, shape, {&playerCollisionGroup}, scanningCollisionGroups)
   {
+    camera = raylib::Camera2D();
+    camera.GetScreenToWorld(body.GetPosition());
   }
 
   void spawn()
@@ -202,8 +205,9 @@ public:
       raylib::Vector2 normalizedInputVector(inputVector.Normalize());
       velocity = velocity.MoveTowards(normalizedInputVector * 40, 1.0);
     } else {
-      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), 0.5);
+      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), 2.0);
     }
+
 
     body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
 
@@ -235,8 +239,10 @@ int main()
   const int screenWidth = 800;
   const int screenHeight = 450;
 
-  raylib::Window window(screenWidth, screenHeight, "raylib game - Henry Liu");
-  SetTargetFPS(60);
+  InitWindow(screenWidth, screenHeight, "raylib game - Henry Liu");
+//  raylib::Window window(screenWidth, screenHeight, "raylib game - Henry Liu");
+
+
 
   Player player(
     "player", BLUE,
@@ -251,19 +257,28 @@ int main()
     {&playerCollisionGroup}
   );
 
-  while (!window.ShouldClose())
+  Camera2D camera = {player.body.GetPosition(), {screenWidth / 2.0, screenHeight/2.0}, 0.0, 1.0};
+
+  SetTargetFPS(60);
+
+  while (!WindowShouldClose())
   {
     BeginDrawing();
 
-    window.ClearBackground(RAYWHITE);
+    ClearBackground(RAYWHITE);
+
+    BeginMode2D(camera);
 
     player.spawn();
+    camera.target = player.body.GetPosition();
     enemy.spawn();
 
     for (auto &projectile : projectileList)
     {
       projectile.spawn();
     }
+
+    EndMode2D();
 
     EndDrawing();
   }
