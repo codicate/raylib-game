@@ -9,15 +9,19 @@ const int screenHeight = 450;
 class Entity;
 class Projectile;
 class Player;
-using CollisionGroup = std::vector<std::vector<Entity *> *>;
 
-std::vector<Entity *> playerCollisionGroup;
-std::vector<Entity *> passiveCollisionGroup;
-std::vector<Entity *> hostileCollisionGroup;
-std::vector<Entity *> environmentCollisionGroup;
-std::vector<Entity *> projectileCollisionGroup;
+using CollisionGroup = std::vector<Entity *>;
+using CollisionGroups = std::vector<CollisionGroup *>;
+
+CollisionGroup playerCollisionGroup;
+CollisionGroup passiveCollisionGroup;
+CollisionGroup hostileCollisionGroup;
+CollisionGroup environmentCollisionGroup;
+CollisionGroup projectileCollisionGroup;
 
 std::vector<Projectile> projectileList;
+
+raylib::Camera2D camera;
 
 class Entity
 {
@@ -25,14 +29,14 @@ public:
   std::string name;
   raylib::Color color;
   raylib::Rectangle body;
-  CollisionGroup scanningCollisionGroups;
+  CollisionGroups scanningCollisionGroups;
 
   Entity(
     std::string name,
     raylib::Color color,
     raylib::Rectangle shape,
-    CollisionGroup belongingCollisionGroups,
-    CollisionGroup scanningCollisionGroups
+    CollisionGroups belongingCollisionGroups,
+    CollisionGroups scanningCollisionGroups
   ) :
     name(name),
     color(color),
@@ -46,8 +50,12 @@ public:
     }
   };
 
-  void checkCollision()
+  void spawn()
   {
+    BeginMode2D(camera);
+    body.Draw(color);
+    EndMode2D();
+
     for (auto scanningCollisionGroup: scanningCollisionGroups)
     {
       for (auto collision: *scanningCollisionGroup)
@@ -58,16 +66,6 @@ public:
         }
       }
     }
-  }
-
-  void spawn()
-  {
-    checkCollision();
-  }
-
-  void draw()
-  {
-    body.Draw(color);
   }
 };
 
@@ -80,7 +78,7 @@ public:
   Projectile(
     raylib::Color color,
     raylib::Rectangle shape,
-    CollisionGroup scanningCollisionGroups,
+    CollisionGroups scanningCollisionGroups,
     float speed,
     raylib::Vector2 direction
   ) :
@@ -109,13 +107,12 @@ class Player : public Entity
 public:
   raylib::Vector2 velocity = {0, 0};
   raylib::Vector2 mouseInitialOffset;
-  raylib::Camera2D camera;
 
   Player(
     std::string name,
     raylib::Color color,
     raylib::Rectangle shape,
-    CollisionGroup scanningCollisionGroups
+    CollisionGroups scanningCollisionGroups
   ) :
     Entity(
       name,
@@ -124,14 +121,14 @@ public:
       {&playerCollisionGroup},
       scanningCollisionGroups
     ),
-    mouseInitialOffset(body.GetPosition()),
-    camera(
+    mouseInitialOffset(body.GetPosition())
+  {
+    camera = raylib::Camera2D(
       mouseInitialOffset,
       {screenWidth / 2.0, screenHeight / 2.0},
       0.0,
       1.0
-    )
-  {
+    );
   }
 
   void spawn()
@@ -155,7 +152,7 @@ public:
 
     body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
     camera.target = body.GetPosition();
-    raylib::Vector2 actualMouseOffset =  -mouseInitialOffset + body.GetPosition();
+    raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body.GetPosition();
     SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
     DrawText(("player position: " + std::to_string(body.x) + " "
@@ -214,18 +211,6 @@ int main()
     {
       projectile.spawn();
     }
-
-    BeginMode2D(player.camera);
-
-    player.draw();
-    enemy.draw();
-
-    for (auto &projectile : projectileList)
-    {
-      projectile.draw();
-    }
-
-    EndMode2D();
 
     EndDrawing();
   }
