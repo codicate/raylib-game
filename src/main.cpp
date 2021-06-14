@@ -3,92 +3,8 @@
 #include <cmath>
 #include <vector>
 
-//struct Circle
-//{
-//  raylib::Vector2 center;
-//  float radius;
-//
-//  void Draw(raylib::Color c)
-//  {
-//    center.DrawCircle(radius, c);
-//  }
-//
-//  bool CheckCollsion(Circle circle)
-//  {
-//    return (circle.center - center).Length() <= (circle.radius + radius);
-//  }
-//};
-//
-//enum class ShapeType
-//{
-//  Rectangle,
-//  Circle
-//};
-//
-//struct Shape
-//{
-//  ShapeType e;
-//
-//  union
-//  {
-//    raylib::Rectangle rect;
-//    Circle circle;
-//  };
-//
-//  void draw(raylib::Color c)
-//  {
-//    switch (e)
-//    {
-//      case ShapeType::Rectangle:
-//      {
-//        rect.Draw(c);
-//      }
-//        break;
-//
-//      case ShapeType::Circle:
-//      {
-//        circle.Draw(c);
-//      }
-//        break;
-//    }
-//  }
-//
-//  bool CheckCollision(Shape shape)
-//  {
-//    switch (shape.e)
-//    {
-//      case ShapeType::Rectangle:
-//        switch (e)
-//        {
-//          case ShapeType::Rectangle:
-//          {
-//            return rect.CheckCollision(shape.rect);
-//          }
-//
-//          case ShapeType::Circle:
-//          {
-//            return rect.CheckCollision(shape.circle.center, shape.circle.radius);
-//          }
-//        }
-//        break;
-//
-//      case ShapeType::Circle:
-//        switch (e)
-//        {
-//          case ShapeType::Rectangle:
-//          {
-//            return shape.rect.CheckCollision(circle.center, circle.radius);
-//          }
-//
-//          case ShapeType::Circle:
-//          {
-//            return circle.CheckCollsion(circle);
-//          }
-//        }
-//        break;
-//    }
-//  }
-//};
+const int screenWidth = 800;
+const int screenHeight = 450;
 
 class Entity;
 class Projectile;
@@ -130,10 +46,8 @@ public:
     }
   };
 
-  void spawn()
+  void checkCollision()
   {
-    body.Draw(color);
-
     for (auto scanningCollisionGroup: scanningCollisionGroups)
     {
       for (auto collision: *scanningCollisionGroup)
@@ -144,6 +58,16 @@ public:
         }
       }
     }
+  }
+
+  void spawn()
+  {
+    checkCollision();
+  }
+
+  void draw()
+  {
+    body.Draw(color);
   }
 };
 
@@ -160,7 +84,13 @@ public:
     float speed,
     raylib::Vector2 direction
   ) :
-    Entity("bullet", color, shape, {&projectileCollisionGroup}, scanningCollisionGroups),
+    Entity(
+      "bullet",
+      color,
+      shape,
+      {&projectileCollisionGroup},
+      scanningCollisionGroups
+    ),
     speed(speed),
     direction(direction)
   {
@@ -178,6 +108,7 @@ class Player : public Entity
 {
 public:
   raylib::Vector2 velocity = {0, 0};
+  raylib::Vector2 mouseInitialOffset;
   raylib::Camera2D camera;
 
   Player(
@@ -185,10 +116,22 @@ public:
     raylib::Color color,
     raylib::Rectangle shape,
     CollisionGroup scanningCollisionGroups
-  ) : Entity(name, color, shape, {&playerCollisionGroup}, scanningCollisionGroups)
+  ) :
+    Entity(
+      name,
+      color,
+      shape,
+      {&playerCollisionGroup},
+      scanningCollisionGroups
+    ),
+    mouseInitialOffset(body.GetPosition()),
+    camera(
+      mouseInitialOffset,
+      {screenWidth / 2.0, screenHeight / 2.0},
+      0.0,
+      1.0
+    )
   {
-    camera = raylib::Camera2D();
-    camera.GetScreenToWorld(body.GetPosition());
   }
 
   void spawn()
@@ -204,21 +147,26 @@ public:
     {
       raylib::Vector2 normalizedInputVector(inputVector.Normalize());
       velocity = velocity.MoveTowards(normalizedInputVector * 40, 1.0);
-    } else {
+    }
+    else
+    {
       velocity = velocity.MoveTowards(raylib::Vector2(0, 0), 2.0);
     }
 
-
     body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
+    camera.target = body.GetPosition();
+    raylib::Vector2 actualMouseOffset =  -mouseInitialOffset + body.GetPosition();
+    SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
-    DrawText(("normalizedInputVector: " + std::to_string(body.x) + " "
+    DrawText(("player position: " + std::to_string(body.x) + " "
       + std::to_string(body.y)).c_str(), 0, 0, 10, GOLD);
 
-    raylib::Vector2 test = (raylib::Vector2)(raylib::Vector2(0.0, 0.0).MoveTowards({0.0, 0.0}, 10.0));
-//    DrawText((std::to_string(test.x) + " " + std::to_string(test.y)).c_str(), 0, 120, 10, RED);
+    DrawText(("mouse position: " + std::to_string((raylib::Vector2(GetMousePosition())).x) + " "
+      + std::to_string((raylib::Vector2(GetMousePosition())).y)).c_str(), 0, 20, 10, BLUE);
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
+
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
 
       Projectile newProjectile(
@@ -236,13 +184,7 @@ public:
 
 int main()
 {
-  const int screenWidth = 800;
-  const int screenHeight = 450;
-
   InitWindow(screenWidth, screenHeight, "raylib game - Henry Liu");
-//  raylib::Window window(screenWidth, screenHeight, "raylib game - Henry Liu");
-
-
 
   Player player(
     "player", BLUE,
@@ -257,8 +199,6 @@ int main()
     {&playerCollisionGroup}
   );
 
-  Camera2D camera = {player.body.GetPosition(), {screenWidth / 2.0, screenHeight/2.0}, 0.0, 1.0};
-
   SetTargetFPS(60);
 
   while (!WindowShouldClose())
@@ -267,15 +207,22 @@ int main()
 
     ClearBackground(RAYWHITE);
 
-    BeginMode2D(camera);
-
     player.spawn();
-    camera.target = player.body.GetPosition();
     enemy.spawn();
 
     for (auto &projectile : projectileList)
     {
       projectile.spawn();
+    }
+
+    BeginMode2D(player.camera);
+
+    player.draw();
+    enemy.draw();
+
+    for (auto &projectile : projectileList)
+    {
+      projectile.draw();
     }
 
     EndMode2D();
