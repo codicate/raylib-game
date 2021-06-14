@@ -1,6 +1,7 @@
 ﻿#include "raylib-cpp.hpp"
-#include<iostream>
+#include <algorithm>
 #include <vector>
+#include <ctime>
 
 const int screenWidth = 800;
 const int screenHeight = 450;
@@ -18,7 +19,7 @@ CollisionGroup hostileCollisionGroup;
 CollisionGroup environmentCollisionGroup;
 CollisionGroup projectileCollisionGroup;
 
-std::vector<Projectile> projectileList;
+std::vector<Projectile *> projectileList;
 
 raylib::Camera2D camera;
 
@@ -28,6 +29,7 @@ public:
   std::string name;
   raylib::Color color;
   raylib::Rectangle body;
+  CollisionGroups belongingCollisionGroups;
   CollisionGroups scanningCollisionGroups;
 
   Entity(
@@ -40,11 +42,11 @@ public:
     name(name),
     color(color),
     body(shape),
+    belongingCollisionGroups(belongingCollisionGroups),
     scanningCollisionGroups(scanningCollisionGroups)
   {
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
-      std::cout << belongingCollisionGroup << std::endl;
       belongingCollisionGroup->push_back(this);
     }
   };
@@ -66,20 +68,35 @@ public:
       }
     }
   }
+
+  void despawn()
+  {
+    for (auto belongingCollisionGroup : belongingCollisionGroups)
+    {
+      auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
+      if (position != belongingCollisionGroup->end())
+        belongingCollisionGroup->erase(position);
+    }
+  }
 };
 
 class Projectile : public Entity
 {
+private:
+  std::clock_t spawnStartTime;
+
 public:
   float speed;
   raylib::Vector2 direction;
+  double lifetime;
 
   Projectile(
     raylib::Color color,
     raylib::Rectangle shape,
     CollisionGroups scanningCollisionGroups,
     float speed,
-    raylib::Vector2 direction
+    raylib::Vector2 direction,
+    double lifetime
   ) :
     Entity(
       "bullet",
@@ -89,8 +106,11 @@ public:
       scanningCollisionGroups
     ),
     speed(speed),
-    direction(direction)
+    direction(direction),
+    lifetime(lifetime)
   {
+    spawnStartTime = clock();
+    projectileList.push_back(this);
   }
 
   void spawn()
@@ -98,10 +118,54 @@ public:
     Entity::spawn();
 
     body.SetPosition(direction * speed + body.GetPosition());
+
+    double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
+    DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
+
+    if (timePassed >= lifetime)
+    {
+      Entity::despawn();
+      auto position = std::find(projectileList.begin(), projectileList.end(), this);
+      projectileList.erase(position);
+      delete (this);
+    }
   }
 };
 
-class Player : public Entity
+class Subject : public Entity
+{
+public:
+  int health;
+  int damage;
+
+  Subject(
+    std::string name,
+    raylib::Color color,
+    raylib::Rectangle shape,
+    CollisionGroups belongingCollisionGroups,
+    CollisionGroups scanningCollisionGroups,
+    int health,
+    int damage
+  ) :
+    Entity(
+      name,
+      color,
+      shape,
+      belongingCollisionGroups,
+      scanningCollisionGroups
+    ),
+    health(health),
+    damage(damage)
+  {
+  }
+
+  void takeDamage(Subject damageSubject)
+  {
+    health -= damageSubject.damage;
+  }
+};
+
+class Player : public Subject
 {
 public:
   raylib::Vector2 velocity = {0, 0};
@@ -111,14 +175,18 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Rectangle shape,
-    CollisionGroups scanningCollisionGroups
+    CollisionGroups scanningCollisionGroups,
+    int health,
+    int damage
   ) :
-    Entity(
+    Subject(
       name,
       color,
       shape,
       {&playerCollisionGroup},
-      scanningCollisionGroups
+      scanningCollisionGroups,
+      health,
+      damage
     ),
     mouseInitialOffset(body.GetPosition())
   {
@@ -166,15 +234,14 @@ public:
     {
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
 
-      Projectile newProjectile(
+      new Projectile(
         GOLD,
         raylib::Rectangle(body.x, body.y, 10, 5),
         {&hostileCollisionGroup},
         projectileSpeed,
-        normalizedDirection
+        normalizedDirection,
+        1
       );
-
-      projectileList.push_back(newProjectile);
     }
   }
 };
@@ -184,9 +251,12 @@ int main()
   InitWindow(screenWidth, screenHeight, "raylib game - Henry Liu");
 
   Player player(
-    "player", BLUE,
+    "player",
+    BLUE,
     raylib::Rectangle(200, 100, 100, 150),
-    {&hostileCollisionGroup, &environmentCollisionGroup}
+    {&hostileCollisionGroup, &environmentCollisionGroup},
+    10,
+    2
   );
 
   Entity enemy(
@@ -209,7 +279,7 @@ int main()
 
     for (auto &projectile : projectileList)
     {
-      projectile.spawn();
+      projectile->spawn();
     }
 
     EndDrawing();
