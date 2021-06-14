@@ -3,8 +3,8 @@
 #include <vector>
 #include <ctime>
 
-const int screenWidth = 800;
-const int screenHeight = 450;
+const int screenWidth = 1280;
+const int screenHeight = 720;
 
 class Entity;
 class Projectile;
@@ -25,8 +25,7 @@ CollisionGroup projectileCollisionGroup;
 std::vector<Projectile *> projectileList;
 
 // pointer to main camera object created inside the player class that will be used to render things properly
-raylib::Camera2D* camera;
-
+raylib::Camera2D *camera;
 
 class Entity
 {
@@ -42,13 +41,13 @@ public:
   Entity(
     std::string name,
     raylib::Color color,
-    raylib::Rectangle shape,
+    raylib::Rectangle body,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups
   ) :
     name(name),
     color(color),
-    body(shape),
+    body(body),
     belongingCollisionGroups(belongingCollisionGroups),
     scanningCollisionGroups(scanningCollisionGroups)
   {
@@ -153,6 +152,7 @@ class Subject : public Entity
 public:
   // since subject will move naturally with acceleration and deceleration, its velocity needs to be stored
   raylib::Vector2 velocity = {0, 0};
+  // raylib::Vector2 direction = {0, 0};
   int health;
   int damage;
 
@@ -175,6 +175,26 @@ public:
     health(health),
     damage(damage)
   {
+  }
+
+  void spawn()
+  {
+    Entity::spawn();
+    body.SetPosition(velocity + body.GetPosition());
+  }
+
+  void accelerate(raylib::Vector2 direction, float acceleration, float maxSpeed)
+  {
+    // normalize the vector so that the object will not move faster diagonally
+    raylib::Vector2 normalizedInputVector(direction.Normalize());
+    // gradually gaining velocity towards `maxSpeed` by `acceleration`
+    velocity = velocity.MoveTowards(normalizedInputVector * maxSpeed, acceleration);
+  }
+
+  void decelerate(float deceleration)
+  {
+    // gradually losing velocity towards stopping point by `deceleration`
+    velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
   }
 
   void takeDamage(Subject damageSubject)
@@ -218,12 +238,9 @@ public:
 
   void spawn()
   {
-    const float maxSpeed = 30.0;
-    const float acceleration = 1.0;
-    const float deceleration = 2.0;
-    const float projectileSpeed = 20.0;
+    const float projectileSpeed = 40.0;
 
-    Entity::spawn();
+    Subject::spawn();
 
     raylib::Vector2 inputVector(
       (float) (IsKeyDown(KEY_D) - IsKeyDown(KEY_A)),
@@ -233,18 +250,12 @@ public:
     // if any key is pressed
     if (!(inputVector == raylib::Vector2(0, 0)))
     {
-      // normalize the vector so that the object will not move faster diagonally
-      raylib::Vector2 normalizedInputVector(inputVector.Normalize());
-      // gradually gaining velocity towards `maxSpeed` by `acceleration`
-      velocity = velocity.MoveTowards(normalizedInputVector * maxSpeed, acceleration);
+      Subject::accelerate(inputVector, 0.7, 20.0);
     }
     else
     {
-      // gradually losing velocity towards stopping point by `deceleration`
-      velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
+      Subject::decelerate(1.5);
     }
-
-    body.SetPosition(velocity + body.GetPosition());
 
     // camera follows player
     camera->target = body.GetPosition();
@@ -273,7 +284,8 @@ public:
     }
   }
 
-  void despawn() {
+  void despawn()
+  {
     Entity::despawn();
     delete (camera);
   }
