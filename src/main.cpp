@@ -1,10 +1,15 @@
-﻿#include "raylib-cpp.hpp"
-#include <algorithm>
+﻿#include <algorithm>
 #include <vector>
 #include <ctime>
 
-const int screenWidth = 1280;
-const int screenHeight = 720;
+#include "raylib-cpp.hpp"
+
+#define PHYSAC_IMPLEMENTATION
+#define PHYSAC_NO_THREADS
+#include "Physics.hpp"
+
+
+raylib::Vector2 screenDimension = {1280, 720};
 
 class Entity;
 class Projectile;
@@ -24,15 +29,19 @@ CollisionGroup projectileCollisionGroup;
 // projectiles are created in the heap dynamically, this is used to store their pointers and loop through to spawn them
 std::vector<Projectile *> projectileList;
 
+// pointer to the physics simulation initialization that will be used for all `PhysicsBody`s
+raylib::Physics *physics;
 // pointer to main camera object created inside the player class that will be used to render things properly
 raylib::Camera2D *camera;
+
 
 class Entity
 {
 public:
   std::string name;
   raylib::Color color;
-  raylib::Rectangle body;
+  raylib::Vector2 size;
+  PhysicsBody body;
   // `CollisionGroups` that the entity belonged to, and will be discovered by object scanning for any of these `CollisionGroups`
   CollisionGroups belongingCollisionGroups;
   // `CollisionGroups` that the entity will scan for, and will react if collision occurred
@@ -41,16 +50,20 @@ public:
   Entity(
     std::string name,
     raylib::Color color,
-    raylib::Rectangle body,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups
   ) :
     name(name),
     color(color),
-    body(body),
+    size(size),
     belongingCollisionGroups(belongingCollisionGroups),
     scanningCollisionGroups(scanningCollisionGroups)
   {
+    body = physics->CreateBodyRectangle(position, size.x, size.y, 100);
+    body->enabled = false;
+
     // add self to every `belongingCollisionGroup`
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
@@ -62,21 +75,22 @@ public:
   {
     // render the entity on screen, reactive to camera position and will move in and out of viewport
     BeginMode2D(*camera);
-    body.Draw(color);
+    DrawRectangleV(body->position, size, color);
     EndMode2D();
     // everything rendered below will stay on screen at fixed position
 
-    // scan for and react to every object in every `belongingCollisionGroup`
-    for (auto scanningCollisionGroup: scanningCollisionGroups)
-    {
-      for (auto collision: *scanningCollisionGroup)
-      {
-        if (body.CheckCollision(collision->body))
-        {
-          DrawText(("collided with " + collision->name + " !").c_str(), 0, 10, 10, RED);
-        }
-      }
-    }
+//    // scan for and react to every object in every `belongingCollisionGroup`
+//    for (auto scanningCollisionGroup: scanningCollisionGroups)
+//    {
+//      for (auto collision: *scanningCollisionGroup)
+//      {
+//        if (body.CheckCollision(collision->body))
+//        {
+//
+//          DrawText(("collided with " + collision->name + " !").c_str(), 0, 10, 10, RED);
+//        }
+//      }
+//    }
   }
 
   void despawn()
@@ -87,6 +101,8 @@ public:
       auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
       belongingCollisionGroup->erase(position);
     }
+
+    physics->DestroyBody(physics->GetBody(body->id));
   }
 };
 
@@ -102,7 +118,8 @@ public:
 
   Projectile(
     raylib::Color color,
-    raylib::Rectangle shape,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
     CollisionGroups scanningCollisionGroups,
     float speed,
     raylib::Vector2 direction,
@@ -111,7 +128,8 @@ public:
     Entity(
       "bullet",
       color,
-      shape,
+      size,
+      position,
       {&projectileCollisionGroup},
       scanningCollisionGroups
     ),
@@ -119,6 +137,7 @@ public:
     direction(direction),
     lifetime(lifetime)
   {
+    body->enabled = true;
     // record the time when the projectile is constructed to be used for despawning
     spawnStartTime = clock();
     // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
@@ -129,7 +148,7 @@ public:
   {
     Entity::spawn();
 
-    body.SetPosition(direction * speed + body.GetPosition());
+    body->position = direction * speed + body->position;
 
     // Find the time passed since the projectile was first constructed
     double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
@@ -159,7 +178,8 @@ public:
   Subject(
     std::string name,
     raylib::Color color,
-    raylib::Rectangle shape,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
     int health,
@@ -168,19 +188,22 @@ public:
     Entity(
       name,
       color,
-      shape,
+      size,
+      position,
       belongingCollisionGroups,
       scanningCollisionGroups
     ),
     health(health),
     damage(damage)
   {
+    body->enabled = true;
   }
 
   void spawn()
   {
     Entity::spawn();
-    body.SetPosition(velocity + body.GetPosition());
+
+    body->position = velocity + body->position;
   }
 
   void accelerate(raylib::Vector2 direction, float acceleration, float maxSpeed)
@@ -212,7 +235,8 @@ public:
   Player(
     std::string name,
     raylib::Color color,
-    raylib::Rectangle shape,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
     CollisionGroups scanningCollisionGroups,
     int health,
     int damage
@@ -220,17 +244,18 @@ public:
     Subject(
       name,
       color,
-      shape,
+      size,
+      position,
       {&playerCollisionGroup},
       scanningCollisionGroups,
       health,
       damage
     ),
-    mouseInitialOffset(body.GetPosition())
+    mouseInitialOffset(body->position)
   {
     camera = new raylib::Camera2D(
       mouseInitialOffset,
-      {screenWidth / 2.0, screenHeight / 2.0},
+      screenDimension / 2.0,
       0.0,
       1.0
     );
@@ -238,7 +263,7 @@ public:
 
   void spawn()
   {
-    const float projectileSpeed = 40.0;
+    const float projectileSpeed = 10.0;
 
     Subject::spawn();
 
@@ -258,24 +283,25 @@ public:
     }
 
     // camera follows player
-    camera->target = body.GetPosition();
+    camera->target = body->position;
 
     // find and set the actual global mouse position offset relational to viewport origin by subtracting player offset from viewport origin
-    raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body.GetPosition();
+    raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body->position;
     SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
-    DrawText(("player position: " + std::to_string(body.x) + " "
-      + std::to_string(body.y)).c_str(), 0, 0, 10, GOLD);
+    DrawText(("velocity: " + std::to_string(velocity.x) + " "
+      + std::to_string(velocity.y)).c_str(), 0, 0, 10, GOLD);
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
       // find the direction in form of vector of the direction of mouse click relational to the player
-      raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body.GetPosition()).Normalize());
+      raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body->position).Normalize());
 
       // create new projectile near the player
       new Projectile(
         GOLD,
-        raylib::Rectangle(body.x, body.y, 10, 5),
+        raylib::Vector2(30, 30),
+        body->position,
         {&hostileCollisionGroup},
         projectileSpeed,
         normalizedDirection,
@@ -293,12 +319,14 @@ public:
 
 int main()
 {
-  InitWindow(screenWidth, screenHeight, "raylib game - Henry Liu");
+  InitWindow(screenDimension.x, screenDimension.y, "raylib game - Henry Liu");
+  *physics = raylib::Physics(0);
 
   Player player(
     "player",
     BLUE,
-    raylib::Rectangle(200, 100, 100, 150),
+    raylib::Vector2(100, 150),
+    raylib::Vector2(200, 100),
     {&hostileCollisionGroup, &environmentCollisionGroup},
     10,
     2
@@ -306,7 +334,8 @@ int main()
 
   Entity enemy(
     "enemy", RED,
-    raylib::Rectangle(200, 300, 100, 150),
+    raylib::Vector2(100, 150),
+    raylib::Vector2(300, 300),
     {&hostileCollisionGroup},
     {&playerCollisionGroup, &environmentCollisionGroup}
   );
@@ -315,9 +344,12 @@ int main()
 
   while (!WindowShouldClose())
   {
+    physics->UpdateStep();
+
     BeginDrawing();
 
     ClearBackground(RAYWHITE);
+    DrawFPS(screenDimension.x * 2 - 100, 0);
 
     player.spawn();
     enemy.spawn();
@@ -329,6 +361,9 @@ int main()
 
     EndDrawing();
   }
+
+//  physics->Close();
+  CloseWindow();
 
   return 0;
 }
