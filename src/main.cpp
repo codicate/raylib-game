@@ -10,7 +10,9 @@ class Entity;
 class Projectile;
 class Player;
 
+// alias for a list of objects in a collision group to be looped through to scan for collision
 using CollisionGroup = std::vector<Entity *>;
+// alias for a list of `CollisionGroup`, as any object can belong to and scan multiple `CollisionGroup`s
 using CollisionGroups = std::vector<CollisionGroup *>;
 
 CollisionGroup playerCollisionGroup;
@@ -19,9 +21,12 @@ CollisionGroup hostileCollisionGroup;
 CollisionGroup environmentCollisionGroup;
 CollisionGroup projectileCollisionGroup;
 
+// projectiles are created in the heap dynamically, this is used to store their pointers and loop through to spawn them
 std::vector<Projectile *> projectileList;
 
-raylib::Camera2D camera;
+// pointer to main camera object created inside the player class that will be used to render things properly
+raylib::Camera2D* camera;
+
 
 class Entity
 {
@@ -29,7 +34,9 @@ public:
   std::string name;
   raylib::Color color;
   raylib::Rectangle body;
+  // `CollisionGroups` that the entity belonged to, and will be discovered by object scanning for any of these `CollisionGroups`
   CollisionGroups belongingCollisionGroups;
+  // `CollisionGroups` that the entity will scan for, and will react if collision occurred
   CollisionGroups scanningCollisionGroups;
 
   Entity(
@@ -45,6 +52,7 @@ public:
     belongingCollisionGroups(belongingCollisionGroups),
     scanningCollisionGroups(scanningCollisionGroups)
   {
+    // add self to every `belongingCollisionGroup`
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
       belongingCollisionGroup->push_back(this);
@@ -53,10 +61,13 @@ public:
 
   void spawn()
   {
-    BeginMode2D(camera);
+    // render the entity on screen, reactive to camera position and will move in and out of viewport
+    BeginMode2D(*camera);
     body.Draw(color);
     EndMode2D();
+    // everything rendered below will stay on screen at fixed position
 
+    // scan for and react to every object in every `belongingCollisionGroup`
     for (auto scanningCollisionGroup: scanningCollisionGroups)
     {
       for (auto collision: *scanningCollisionGroup)
@@ -71,11 +82,11 @@ public:
 
   void despawn()
   {
+    //
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
       auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
-      if (position != belongingCollisionGroup->end())
-        belongingCollisionGroup->erase(position);
+      belongingCollisionGroup->erase(position);
     }
   }
 };
@@ -190,7 +201,7 @@ public:
     ),
     mouseInitialOffset(body.GetPosition())
   {
-    camera = raylib::Camera2D(
+    camera = new raylib::Camera2D(
       mouseInitialOffset,
       {screenWidth / 2.0, screenHeight / 2.0},
       0.0,
@@ -223,7 +234,7 @@ public:
     }
 
     body.SetPosition(velocity + raylib::Vector2(body.GetPosition()));
-    camera.target = body.GetPosition();
+    camera->target = body.GetPosition();
     raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body.GetPosition();
     SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
@@ -243,6 +254,11 @@ public:
         1
       );
     }
+  }
+
+  void despawn() {
+    Entity::despawn();
+    delete (camera);
   }
 };
 
