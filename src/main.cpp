@@ -8,10 +8,12 @@
 #define PHYSAC_NO_THREADS
 #include "Physics.hpp"
 
-
 raylib::Vector2 screenDimension = {1280, 720};
 
 class Entity;
+class DynamicEntity;
+class CollisionBody;
+class Subject;
 class Projectile;
 class Player;
 
@@ -34,14 +36,13 @@ raylib::Physics *physics;
 // pointer to main camera object created inside the player class that will be used to render things properly
 raylib::Camera2D *camera;
 
-
 class Entity
 {
 public:
   std::string name;
   raylib::Color color;
   raylib::Vector2 size;
-  PhysicsBody body;
+  raylib::Rectangle shape;
   // `CollisionGroups` that the entity belonged to, and will be discovered by object scanning for any of these `CollisionGroups`
   CollisionGroups belongingCollisionGroups;
   // `CollisionGroups` that the entity will scan for, and will react if collision occurred
@@ -61,8 +62,7 @@ public:
     belongingCollisionGroups(belongingCollisionGroups),
     scanningCollisionGroups(scanningCollisionGroups)
   {
-    body = physics->CreateBodyRectangle(position, size.x, size.y, 100);
-    body->enabled = false;
+    shape = raylib::Rectangle(position, size);
 
     // add self to every `belongingCollisionGroup`
     for (auto belongingCollisionGroup : belongingCollisionGroups)
@@ -71,26 +71,26 @@ public:
     }
   };
 
+  std::vector<Entity *> getCollidedBodies()
+  {
+    std::vector<Entity *> collidedBodies = {};
+
+    // scan for and react to every object in every `belongingCollisionGroup`
+    for (auto scanningCollisionGroup: scanningCollisionGroups)
+      for (auto collidedBody: *scanningCollisionGroup)
+        if (shape.CheckCollision(collidedBody->shape))
+          collidedBodies.push_back(collidedBody);
+
+    return collidedBodies;
+  }
+
   void spawn()
   {
     // render the entity on screen, reactive to camera position and will move in and out of viewport
     BeginMode2D(*camera);
-    DrawRectangleV(body->position, size, color);
+    shape.Draw(color);
     EndMode2D();
     // everything rendered below will stay on screen at fixed position
-
-//    // scan for and react to every object in every `belongingCollisionGroup`
-//    for (auto scanningCollisionGroup: scanningCollisionGroups)
-//    {
-//      for (auto collision: *scanningCollisionGroup)
-//      {
-//        if (body.CheckCollision(collision->body))
-//        {
-//
-//          DrawText(("collided with " + collision->name + " !").c_str(), 0, 10, 10, RED);
-//        }
-//      }
-//    }
   }
 
   void despawn()
@@ -101,89 +101,23 @@ public:
       auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
       belongingCollisionGroup->erase(position);
     }
-
-    physics->DestroyBody(physics->GetBody(body->id));
   }
 };
 
-class Projectile : public Entity
-{
-private:
-  std::clock_t spawnStartTime;
-
-public:
-  float speed;
-  raylib::Vector2 direction;
-  double lifetime;
-
-  Projectile(
-    raylib::Color color,
-    raylib::Vector2 size,
-    raylib::Vector2 position,
-    CollisionGroups scanningCollisionGroups,
-    float speed,
-    raylib::Vector2 direction,
-    double lifetime
-  ) :
-    Entity(
-      "bullet",
-      color,
-      size,
-      position,
-      {&projectileCollisionGroup},
-      scanningCollisionGroups
-    ),
-    speed(speed),
-    direction(direction),
-    lifetime(lifetime)
-  {
-    body->enabled = true;
-    // record the time when the projectile is constructed to be used for despawning
-    spawnStartTime = clock();
-    // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
-    projectileList.push_back(this);
-  }
-
-  void spawn()
-  {
-    Entity::spawn();
-
-    body->position = direction * speed + body->position;
-
-    // Find the time passed since the projectile was first constructed
-    double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
-    DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
-
-    if (timePassed >= lifetime)
-    {
-      Entity::despawn();
-
-      // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
-      auto position = std::find(projectileList.begin(), projectileList.end(), this);
-      projectileList.erase(position);
-      delete (this);
-    }
-  }
-};
-
-class Subject : public Entity
+class DynamicEntity : public Entity
 {
 public:
-  // since subject will move naturally with acceleration and deceleration, its velocity needs to be stored
-  raylib::Vector2 velocity = {0, 0};
-  // raylib::Vector2 direction = {0, 0};
-  int health;
-  int damage;
+  // since `DynamicEntity` will move naturally with acceleration and deceleration, its velocity needs to be stored
+  raylib::Vector2 velocity;
 
-  Subject(
+  DynamicEntity(
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
     raylib::Vector2 position,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
-    int health,
-    int damage
+    raylib::Vector2 initialVelocity = raylib::Vector2(0, 0)
   ) :
     Entity(
       name,
@@ -193,17 +127,8 @@ public:
       belongingCollisionGroups,
       scanningCollisionGroups
     ),
-    health(health),
-    damage(damage)
+    velocity(initialVelocity)
   {
-    body->enabled = true;
-  }
-
-  void spawn()
-  {
-    Entity::spawn();
-
-    body->position = velocity + body->position;
   }
 
   void accelerate(raylib::Vector2 direction, float acceleration, float maxSpeed)
@@ -220,9 +145,151 @@ public:
     velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
   }
 
+  void spawn()
+  {
+    Entity::spawn();
+    shape.SetPosition(velocity + shape.GetPosition());
+  }
+};
+
+class CollisionBody : public DynamicEntity
+{
+public:
+  PhysicsBody body;
+
+  CollisionBody(
+    std::string name,
+    raylib::Color color,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
+    CollisionGroups belongingCollisionGroups,
+    CollisionGroups scanningCollisionGroups,
+    bool isDynamic,
+    raylib::Vector2 velocity = raylib::Vector2(0, 0)
+  ) :
+    DynamicEntity(
+      name,
+      color,
+      size,
+      position,
+      belongingCollisionGroups,
+      scanningCollisionGroups,
+      velocity
+    )
+  {
+    body = physics->CreateBodyRectangle(position, size.x, size.y, 100);
+    body->enabled = isDynamic;
+  }
+
+  void spawn()
+  {
+    Entity::spawn();
+    body->position = velocity + body->position;
+    shape.SetPosition(body->position);
+  }
+
+  void despawn()
+  {
+    DynamicEntity::despawn();
+    physics->DestroyBody(physics->GetBody(body->id));
+  }
+};
+
+class Subject : public CollisionBody
+{
+public:
+  int health;
+  int damage;
+
+  Subject(
+    std::string name,
+    raylib::Color color,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
+    CollisionGroups belongingCollisionGroups,
+    CollisionGroups scanningCollisionGroups,
+    int health,
+    int damage
+  ) :
+    CollisionBody(
+      name,
+      color,
+      size,
+      position,
+      belongingCollisionGroups,
+      scanningCollisionGroups,
+      true
+    ),
+    health(health),
+    damage(damage)
+  {
+  }
+
   void takeDamage(Subject damageSubject)
   {
     health -= damageSubject.damage;
+  }
+};
+
+class Projectile : public DynamicEntity
+{
+private:
+  std::clock_t spawnStartTime;
+
+public:
+
+  double lifetime;
+
+  Projectile(
+    std::string name,
+    raylib::Color color,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
+    CollisionGroups scanningCollisionGroups,
+    raylib::Vector2 direction,
+    float speed,
+    double lifetime
+  ) :
+    DynamicEntity(
+      name,
+      color,
+      size,
+      position,
+      {&projectileCollisionGroup},
+      scanningCollisionGroups,
+      direction * speed
+    ),
+    lifetime(lifetime)
+  {
+    // record the time when the projectile is constructed to be used for despawning
+    spawnStartTime = clock();
+    // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
+    projectileList.push_back(this);
+  }
+
+  void spawn()
+  {
+    DynamicEntity::spawn();
+
+    std::vector<Entity *> collidedBodies = getCollidedBodies();
+    for (auto collidedBody : collidedBodies)
+    {
+      DrawText(("collided with " + collidedBody->name + " !").c_str(), 0, 10, 10, RED);
+    }
+
+    // Find the time passed since the projectile was first constructed
+    double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
+    DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
+
+    if (timePassed >= lifetime)
+    {
+      DynamicEntity::despawn();
+
+      // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
+      auto position = std::find(projectileList.begin(), projectileList.end(), this);
+      projectileList.erase(position);
+      delete (this);
+    }
   }
 };
 
@@ -263,7 +330,7 @@ public:
 
   void spawn()
   {
-    const float projectileSpeed = 10.0;
+    const float projectileSpeed = 40.0;
 
     Subject::spawn();
 
@@ -274,13 +341,9 @@ public:
 
     // if any key is pressed
     if (!(inputVector == raylib::Vector2(0, 0)))
-    {
       Subject::accelerate(inputVector, 0.7, 20.0);
-    }
     else
-    {
       Subject::decelerate(1.5);
-    }
 
     // camera follows player
     camera->target = body->position;
@@ -299,12 +362,13 @@ public:
 
       // create new projectile near the player
       new Projectile(
+        "player bullet",
         GOLD,
-        raylib::Vector2(30, 30),
+        raylib::Vector2(10, 5),
         body->position,
         {&hostileCollisionGroup},
-        projectileSpeed,
         normalizedDirection,
+        projectileSpeed,
         1
       );
     }
@@ -312,7 +376,7 @@ public:
 
   void despawn()
   {
-    Entity::despawn();
+    Subject::despawn();
     delete (camera);
   }
 };
@@ -332,12 +396,15 @@ int main()
     2
   );
 
-  Entity enemy(
-    "enemy", RED,
+  Subject enemy(
+    "enemy",
+    RED,
     raylib::Vector2(100, 150),
     raylib::Vector2(300, 300),
     {&hostileCollisionGroup},
-    {&playerCollisionGroup, &environmentCollisionGroup}
+    {&playerCollisionGroup, &environmentCollisionGroup},
+    10,
+    2
   );
 
   SetTargetFPS(60);
