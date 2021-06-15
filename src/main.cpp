@@ -71,10 +71,9 @@ public:
     }
   };
 
-  template <typename EntityType>
-  EntityType getCollidedBodies()
+  CollisionGroup getCollidedBodies()
   {
-    EntityType collidedBodies;
+    CollisionGroup collidedBodies;
 
     // scan for and react to every object in every `belongingCollisionGroup`
     for (auto scanningCollisionGroup: scanningCollisionGroups)
@@ -85,7 +84,7 @@ public:
     return collidedBodies;
   }
 
-  void spawn()
+  virtual void spawn()
   {
     // render the entity on screen, reactive to camera position and will move in and out of viewport
     BeginMode2D(*camera);
@@ -94,7 +93,7 @@ public:
     // everything rendered below will stay on screen at fixed position
   }
 
-  void despawn()
+  virtual void despawn()
   {
     // loop every `belongingCollisionGroup` and remove self, saving unnecessary scans
     for (auto belongingCollisionGroup : belongingCollisionGroups)
@@ -146,7 +145,7 @@ public:
     velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
   }
 
-  void spawn()
+  void spawn() override
   {
     Entity::spawn();
     shape.SetPosition(velocity + shape.GetPosition());
@@ -182,14 +181,14 @@ public:
     body->enabled = isDynamic;
   }
 
-  void spawn()
+  void spawn() override
   {
     Entity::spawn();
     body->position = velocity + body->position;
     shape.SetPosition(body->position);
   }
 
-  void despawn()
+  void despawn() override
   {
     DynamicEntity::despawn();
     physics->DestroyBody(physics->GetBody(body->id));
@@ -199,8 +198,8 @@ public:
 class Subject : public CollisionBody
 {
 public:
-  int health;
-  int damage;
+  double health;
+  double damage;
 
   Subject(
     std::string name,
@@ -209,8 +208,8 @@ public:
     raylib::Vector2 position,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
-    int health,
-    int damage
+    double health,
+    double damage
   ) :
     CollisionBody(
       name,
@@ -226,9 +225,9 @@ public:
   {
   }
 
-  void takeDamage(Subject damageSubject)
+  void takeDamage(double incomingDamage)
   {
-    health -= damageSubject.damage;
+    health -= incomingDamage;
   }
 };
 
@@ -271,10 +270,10 @@ public:
 
   std::vector<Subject *> getCollidedBodies()
   {
-    return DynamicEntity::getCollidedBodies<std::vector<Subject *>>();
+    return DynamicEntity::getCollidedBodies();
   }
 
-  void spawn()
+  void spawn() override
   {
     DynamicEntity::spawn();
 
@@ -286,7 +285,7 @@ public:
       despawn();
   }
 
-  void despawn()
+  void despawn() override
   {
     DynamicEntity::despawn();
 
@@ -332,9 +331,7 @@ public:
     );
   }
 
-  std::vector<Projectile *> projectileFired;
-
-  void spawn()
+  void spawn() override
   {
     const float projectileSpeed = 40.0;
 
@@ -380,7 +377,7 @@ public:
     }
   }
 
-  void despawn()
+  void despawn() override
   {
     Subject::despawn();
     delete (camera);
