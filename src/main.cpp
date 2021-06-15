@@ -71,9 +71,10 @@ public:
     }
   };
 
-  std::vector<Entity *> getCollidedBodies()
+  template <typename EntityType>
+  EntityType getCollidedBodies()
   {
-    std::vector<Entity *> collidedBodies = {};
+    EntityType collidedBodies;
 
     // scan for and react to every object in every `belongingCollisionGroup`
     for (auto scanningCollisionGroup: scanningCollisionGroups)
@@ -235,10 +236,10 @@ class Projectile : public DynamicEntity
 {
 private:
   std::clock_t spawnStartTime;
+  double lifetime;
 
 public:
-
-  double lifetime;
+  double damage;
 
   Projectile(
     std::string name,
@@ -246,8 +247,8 @@ public:
     raylib::Vector2 size,
     raylib::Vector2 position,
     CollisionGroups scanningCollisionGroups,
-    raylib::Vector2 direction,
-    float speed,
+    raylib::Vector2 velocity,
+    double damage,
     double lifetime
   ) :
     DynamicEntity(
@@ -257,8 +258,9 @@ public:
       position,
       {&projectileCollisionGroup},
       scanningCollisionGroups,
-      direction * speed
+      velocity
     ),
+    damage(damage),
     lifetime(lifetime)
   {
     // record the time when the projectile is constructed to be used for despawning
@@ -267,29 +269,31 @@ public:
     projectileList.push_back(this);
   }
 
+  std::vector<Subject *> getCollidedBodies()
+  {
+    return DynamicEntity::getCollidedBodies<std::vector<Subject *>>();
+  }
+
   void spawn()
   {
     DynamicEntity::spawn();
-
-    std::vector<Entity *> collidedBodies = getCollidedBodies();
-    for (auto collidedBody : collidedBodies)
-    {
-      DrawText(("collided with " + collidedBody->name + " !").c_str(), 0, 10, 10, RED);
-    }
 
     // Find the time passed since the projectile was first constructed
     double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
     DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
 
     if (timePassed >= lifetime)
-    {
-      DynamicEntity::despawn();
+      despawn();
+  }
 
-      // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
-      auto position = std::find(projectileList.begin(), projectileList.end(), this);
-      projectileList.erase(position);
-      delete (this);
-    }
+  void despawn()
+  {
+    DynamicEntity::despawn();
+
+    // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
+    auto position = std::find(projectileList.begin(), projectileList.end(), this);
+    projectileList.erase(position);
+    delete (this);
   }
 };
 
@@ -327,6 +331,8 @@ public:
       1.0
     );
   }
+
+  std::vector<Projectile *> projectileFired;
 
   void spawn()
   {
@@ -367,8 +373,8 @@ public:
         raylib::Vector2(10, 5),
         body->position,
         {&hostileCollisionGroup},
-        normalizedDirection,
-        projectileSpeed,
+        normalizedDirection * projectileSpeed,
+        damage,
         1
       );
     }
@@ -424,12 +430,23 @@ int main()
     for (auto &projectile : projectileList)
     {
       projectile->spawn();
+      std::vector<Subject *> bodiesHit = projectile->getCollidedBodies();
+      DrawText(("num of bodiesHit: " + std::to_string(bodiesHit.size())).c_str(), 0, 60, 10, PINK);
+
+      if (bodiesHit.size() >= 1)
+      {
+        for (auto body : bodiesHit)
+        {
+          body->takeDamage(projectile.damage);
+        }
+
+        projectile->despawn();
+      }
     }
 
     EndDrawing();
   }
 
-//  physics->Close();
   CloseWindow();
 
   return 0;
