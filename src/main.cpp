@@ -1,6 +1,7 @@
 ﻿#include <algorithm>
 #include <vector>
 #include <ctime>
+#include <iostream>
 
 #include "raylib-cpp.hpp"
 
@@ -38,6 +39,9 @@ raylib::Camera2D *camera;
 
 class Entity
 {
+private:
+  bool alive = true;
+
 public:
   std::string name;
   raylib::Color color;
@@ -84,13 +88,28 @@ public:
     return collidedBodies;
   }
 
+  virtual void render()
+  {
+    shape.Draw(color);
+  }
+
+  virtual void update()
+  {
+
+  }
+
   virtual void spawn()
   {
-    // render the entity on screen, reactive to camera position and will move in and out of viewport
-    BeginMode2D(*camera);
-    shape.Draw(color);
-    EndMode2D();
-    // everything rendered below will stay on screen at fixed position
+    if (alive)
+    {
+      // render the entity on screen, reactive to camera position and will move in and out of viewport
+      BeginMode2D(*camera);
+      render();
+      EndMode2D();
+
+      // everything rendered below will stay on screen at fixed position
+      update();
+    }
   }
 
   virtual void despawn()
@@ -101,6 +120,8 @@ public:
       auto position = std::find(belongingCollisionGroup->begin(), belongingCollisionGroup->end(), this);
       belongingCollisionGroup->erase(position);
     }
+
+    alive = false;
   }
 };
 
@@ -145,9 +166,9 @@ public:
     velocity = velocity.MoveTowards(raylib::Vector2(0, 0), deceleration);
   }
 
-  void spawn() override
+  void update() override
   {
-    Entity::spawn();
+    Entity::update();
     shape.SetPosition(velocity + shape.GetPosition());
   }
 };
@@ -181,9 +202,9 @@ public:
     body->enabled = isDynamic;
   }
 
-  void spawn() override
+  void update() override
   {
-    Entity::spawn();
+    Entity::update();
     body->position = velocity + body->position;
     shape.SetPosition(body->position);
   }
@@ -229,6 +250,16 @@ public:
   {
     health -= incomingDamage;
   }
+
+  void update() override
+  {
+    CollisionBody::update();
+
+    if (health <= 0)
+    {
+      CollisionBody::despawn();
+    }
+  }
 };
 
 class Projectile : public DynamicEntity
@@ -268,14 +299,9 @@ public:
     projectileList.push_back(this);
   }
 
-  std::vector<Subject *> getCollidedBodies()
+  void update() override
   {
-    return DynamicEntity::getCollidedBodies();
-  }
-
-  void spawn() override
-  {
-    DynamicEntity::spawn();
+    DynamicEntity::update();
 
     // Find the time passed since the projectile was first constructed
     double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
@@ -331,11 +357,11 @@ public:
     );
   }
 
-  void spawn() override
+  void update() override
   {
     const float projectileSpeed = 40.0;
 
-    Subject::spawn();
+    Subject::update();
 
     raylib::Vector2 inputVector(
       (float) (IsKeyDown(KEY_D) - IsKeyDown(KEY_A)),
@@ -386,6 +412,7 @@ public:
 
 int main()
 {
+  std::cout << "yo0000000000000000 print something" << std::endl;
   InitWindow(screenDimension.x, screenDimension.y, "raylib game - Henry Liu");
   *physics = raylib::Physics(0);
 
@@ -421,25 +448,26 @@ int main()
     ClearBackground(RAYWHITE);
     DrawFPS(screenDimension.x * 2 - 100, 0);
 
-    player.spawn();
-    enemy.spawn();
-
     for (auto &projectile : projectileList)
     {
       projectile->spawn();
-      std::vector<Subject *> bodiesHit = projectile->getCollidedBodies();
+      std::vector<Entity *> bodiesHit = projectile->getCollidedBodies();
       DrawText(("num of bodiesHit: " + std::to_string(bodiesHit.size())).c_str(), 0, 60, 10, PINK);
 
-      if (bodiesHit.size() >= 1)
+      if (!bodiesHit.empty())
       {
+        std::cout << "not empty bro" << std::endl;
         for (auto body : bodiesHit)
         {
-          body->takeDamage(projectile.damage);
+          dynamic_cast<Subject *>(body)->takeDamage(projectile->damage);
         }
 
         projectile->despawn();
       }
     }
+
+    player.spawn();
+    enemy.spawn();
 
     EndDrawing();
   }
