@@ -410,9 +410,67 @@ public:
   }
 };
 
+class Enemy : public Subject
+{
+public:
+  Enemy(
+    std::string name,
+    raylib::Color color,
+    raylib::Vector2 size,
+    raylib::Vector2 position,
+    CollisionGroups scanningCollisionGroups,
+    int health,
+    int damage
+  ) :
+    Subject(
+      name,
+      color,
+      size,
+      position,
+      {&hostileCollisionGroup},
+      scanningCollisionGroups,
+      health,
+      damage
+    )
+  {
+
+  }
+};
+
+std::vector<Enemy *> enemySpawner(
+  std::string name,
+  raylib::Color color,
+  raylib::Vector2 size,
+  CollisionGroups scanningCollisionGroups,
+  int health,
+  int damage,
+  int quantity
+)
+{
+  std::vector<Enemy *> enemies;
+
+  for (int i = 0; i < quantity; ++i)
+  {
+    Enemy *newEnemy = new Enemy(
+      name,
+      color,
+      size,
+      raylib::Vector2(200 + 300 * i, 300),
+      scanningCollisionGroups,
+      health,
+      damage
+    );
+
+    std::cout << newEnemy->shape.x << " " << newEnemy->shape.y << std::endl;
+    std::cout << newEnemy->body->position.x << " " << newEnemy->body->position.y << std::endl;
+    enemies.push_back(newEnemy);
+  }
+
+  return enemies;
+}
+
 int main()
 {
-  std::cout << "yo0000000000000000 print something" << std::endl;
   InitWindow(screenDimension.x, screenDimension.y, "raylib game - Henry Liu");
   *physics = raylib::Physics(0);
 
@@ -426,15 +484,14 @@ int main()
     2
   );
 
-  Subject enemy(
+  auto enemies = enemySpawner(
     "enemy",
     RED,
     raylib::Vector2(100, 150),
-    raylib::Vector2(300, 300),
-    {&hostileCollisionGroup},
     {&playerCollisionGroup, &environmentCollisionGroup},
     10,
-    2
+    2,
+    1
   );
 
   SetTargetFPS(60);
@@ -467,7 +524,9 @@ int main()
     }
 
     player.spawn();
-    enemy.spawn();
+
+    for (auto enemy : enemies)
+      enemy->spawn();
 
     EndDrawing();
   }
