@@ -211,6 +211,9 @@ public:
 class CollisionBody : public DynamicEntity
 {
 public:
+  float acceleration;
+  float deceleration;
+  float maxSpeed;
   bool isDynamic;
   PhysicsBody body;
 
@@ -221,6 +224,9 @@ public:
     raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
+    float acceleration,
+    float deceleration,
+    float maxSpeed,
     bool isDynamic,
     raylib::Vector2 velocity = raylib::Vector2(0, 0)
   ) :
@@ -233,6 +239,9 @@ public:
       scanningCollisionGroups,
       velocity
     ),
+    acceleration(acceleration),
+    deceleration(deceleration),
+    maxSpeed(maxSpeed),
     isDynamic(isDynamic) {}
 
   void init() override
@@ -259,8 +268,8 @@ public:
 class Subject : public CollisionBody
 {
 public:
-  double health;
-  double damage;
+  float health;
+  float damage;
 
   Subject(
     std::string name,
@@ -269,8 +278,11 @@ public:
     raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
-    double health,
-    double damage
+    float acceleration,
+    float deceleration,
+    float maxSpeed,
+    float health,
+    float damage
   ) :
     CollisionBody(
       name,
@@ -279,12 +291,15 @@ public:
       initialPosition,
       belongingCollisionGroups,
       scanningCollisionGroups,
+      acceleration,
+      deceleration,
+      maxSpeed,
       true
     ),
     health(health),
     damage(damage) {}
 
-  void takeDamage(double incomingDamage)
+  void takeDamage(float incomingDamage)
   {
     health -= incomingDamage;
   }
@@ -304,10 +319,10 @@ class Projectile : public DynamicEntity
 {
 private:
   std::clock_t spawnStartTime;
-  double lifetime;
+  float lifetime;
 
 public:
-  double damage;
+  float damage;
 
   Projectile(
     std::string name,
@@ -316,8 +331,8 @@ public:
     raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
     raylib::Vector2 velocity,
-    double damage,
-    double lifetime
+    float damage,
+    float lifetime
   ) :
     DynamicEntity(
       name,
@@ -355,7 +370,7 @@ public:
     }
 
     // Find the time passed since the projectile was first constructed
-    double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
+    float timePassed = (clock() - spawnStartTime) / (float) CLOCKS_PER_SEC;
     DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
 
     if (timePassed >= lifetime)
@@ -374,6 +389,9 @@ public:
     raylib::Vector2 size,
     raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
+    float acceleration,
+    float deceleration,
+    float maxSpeed,
     int health,
     int damage
   ) :
@@ -384,6 +402,9 @@ public:
       initialPosition,
       {&playerCollisionGroup},
       scanningCollisionGroups,
+      acceleration,
+      deceleration,
+      maxSpeed,
       health,
       damage
     ) {}
@@ -414,9 +435,9 @@ public:
 
     // if any key is pressed
     if (!(inputVector == raylib::Vector2(0, 0)))
-      Subject::accelerate(inputVector, 0.7, 20.0);
+      Subject::accelerate(inputVector, acceleration, maxSpeed);
     else
-      Subject::decelerate(1.5);
+      Subject::decelerate(deceleration);
 
     // camera follows player
     camera->target = body->position;
@@ -467,6 +488,9 @@ public:
     raylib::Vector2 size,
     raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
+    float acceleration,
+    float deceleration,
+    float maxSpeed,
     int health,
     int damage
   ) :
@@ -477,6 +501,9 @@ public:
       initialPosition,
       {&hostileCollisionGroup},
       scanningCollisionGroups,
+      acceleration,
+      deceleration,
+      maxSpeed,
       health,
       damage
     ) {}
@@ -493,7 +520,7 @@ public:
       if (distanceToPlayer <= 1000)
       {
         const auto angleToPlayer = (raylib::Vector2(player->body->position) - body->position).Normalize();
-        Subject::accelerate(angleToPlayer, 0.3, 10.0);
+        Subject::accelerate(angleToPlayer, acceleration, maxSpeed);
       }
     }
   }
@@ -510,6 +537,9 @@ int main()
     raylib::Vector2(100, 150),
     raylib::Vector2(200, 100),
     {&hostileCollisionGroup, &environmentCollisionGroup},
+    0.7,
+    1.5,
+    20.0,
     10,
     2
   );
@@ -522,6 +552,9 @@ int main()
       raylib::Vector2(100, 150),
       raylib::Vector2(0, 0),
       {&playerCollisionGroup, &environmentCollisionGroup},
+      0.2,
+      1.0,
+      10.0,
       10,
       2,
     },
