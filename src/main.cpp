@@ -47,6 +47,7 @@ public:
   raylib::Color color;
   raylib::Vector2 size;
   raylib::Rectangle shape;
+  raylib::Vector2 initialPosition;
   // `CollisionGroups` that the entity belonged to, and will be discovered by object scanning for any of these `CollisionGroups`
   CollisionGroups belongingCollisionGroups;
   // `CollisionGroups` that the entity will scan for, and will react if collision occurred
@@ -56,26 +57,29 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups
   ) :
     name(name),
     color(color),
     size(size),
+    initialPosition(initialPosition),
     belongingCollisionGroups(belongingCollisionGroups),
-    scanningCollisionGroups(scanningCollisionGroups)
+    scanningCollisionGroups(scanningCollisionGroups) {};
+
+  virtual void init()
   {
-    shape = raylib::Rectangle(position, size);
+    shape = raylib::Rectangle(initialPosition, size);
 
     // add self to every `belongingCollisionGroup`
     for (auto belongingCollisionGroup : belongingCollisionGroups)
     {
       belongingCollisionGroup->push_back(this);
     }
-  };
+  }
 
-  CollisionGroup getCollidedBodies()
+  virtual CollisionGroup getCollidedBodies()
   {
     CollisionGroup collidedBodies;
 
@@ -88,14 +92,11 @@ public:
     return collidedBodies;
   }
 
+  virtual void update() {}
+
   virtual void render()
   {
     shape.Draw(color);
-  }
-
-  virtual void update()
-  {
-
   }
 
   virtual void spawn()
@@ -112,7 +113,7 @@ public:
     }
   }
 
-  virtual void despawn()
+  virtual void deinit()
   {
     // loop every `belongingCollisionGroup` and remove self, saving unnecessary scans
     for (auto belongingCollisionGroup : belongingCollisionGroups)
@@ -135,7 +136,7 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
     raylib::Vector2 initialVelocity = raylib::Vector2(0, 0)
@@ -144,13 +145,11 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       belongingCollisionGroups,
       scanningCollisionGroups
     ),
-    velocity(initialVelocity)
-  {
-  }
+    velocity(initialVelocity) {}
 
   void accelerate(raylib::Vector2 direction, float acceleration, float maxSpeed)
   {
@@ -176,13 +175,14 @@ public:
 class CollisionBody : public DynamicEntity
 {
 public:
+  bool isDynamic;
   PhysicsBody body;
 
   CollisionBody(
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
     bool isDynamic,
@@ -192,15 +192,19 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       belongingCollisionGroups,
       scanningCollisionGroups,
       velocity
-    )
+    ),
+    isDynamic(isDynamic) {}
+
+  void init() override
   {
-    body = physics->CreateBodyRectangle(position, size.x, size.y, 100);
+    DynamicEntity::init();
+    body = physics->CreateBodyRectangle(initialPosition, size.x, size.y, 100);
     body->enabled = isDynamic;
-  }
+  };
 
   void update() override
   {
@@ -209,9 +213,9 @@ public:
     shape.SetPosition(body->position);
   }
 
-  void despawn() override
+  void deinit() override
   {
-    DynamicEntity::despawn();
+    DynamicEntity::deinit();
     physics->DestroyBody(physics->GetBody(body->id));
   }
 };
@@ -226,7 +230,7 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups belongingCollisionGroups,
     CollisionGroups scanningCollisionGroups,
     double health,
@@ -236,15 +240,13 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       belongingCollisionGroups,
       scanningCollisionGroups,
       true
     ),
     health(health),
-    damage(damage)
-  {
-  }
+    damage(damage) {}
 
   void takeDamage(double incomingDamage)
   {
@@ -257,7 +259,7 @@ public:
 
     if (health <= 0)
     {
-      CollisionBody::despawn();
+      deinit();
     }
   }
 };
@@ -275,7 +277,7 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
     raylib::Vector2 velocity,
     double damage,
@@ -285,14 +287,17 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       {&projectileCollisionGroup},
       scanningCollisionGroups,
       velocity
     ),
     damage(damage),
-    lifetime(lifetime)
+    lifetime(lifetime) {}
+
+  void init() override
   {
+    DynamicEntity::init();
     // record the time when the projectile is constructed to be used for despawning
     spawnStartTime = clock();
     // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
@@ -303,36 +308,45 @@ public:
   {
     DynamicEntity::update();
 
+    std::vector<Entity *> bodiesHit = Entity::getCollidedBodies();
+    DrawText(("num of bodiesHit: " + std::to_string(bodiesHit.size())).c_str(), 0, 60, 10, PINK);
+
+    if (!bodiesHit.empty())
+    {
+      std::cout << "not empty bro" << std::endl;
+      for (auto body : bodiesHit)
+      {
+        dynamic_cast<Subject *>(body)->takeDamage(damage);
+      }
+
+      deinit();
+    }
+
     // Find the time passed since the projectile was first constructed
     double timePassed = (clock() - spawnStartTime) / (double) CLOCKS_PER_SEC;
     DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
 
     if (timePassed >= lifetime)
-      despawn();
+      deinit();
   }
 
-  void despawn() override
+  void deinit() override
   {
-    DynamicEntity::despawn();
-
+    DynamicEntity::deinit();
     // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
     auto position = std::find(projectileList.begin(), projectileList.end(), this);
     projectileList.erase(position);
-    delete (this);
   }
 };
 
 class Player : public Subject
 {
 public:
-  // The initial player position offset from the viewport origin, which will be used to calculate global mouse position, or the mouse position relational to the view port origin
-  raylib::Vector2 mouseInitialOffset;
-
   Player(
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
     int health,
     int damage
@@ -341,16 +355,20 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       {&playerCollisionGroup},
       scanningCollisionGroups,
       health,
       damage
-    ),
-    mouseInitialOffset(body->position)
+    ) {}
+
+  void init() override
   {
+    Subject::init();
+
+    // The initial player position offset from the viewport origin, which will be used to calculate global mouse position, or the mouse position relational to the view port origin
     camera = new raylib::Camera2D(
-      mouseInitialOffset,
+      initialPosition,
       screenDimension / 2.0,
       0.0,
       1.0
@@ -378,11 +396,14 @@ public:
     camera->target = body->position;
 
     // find and set the actual global mouse position offset relational to viewport origin by subtracting player offset from viewport origin
-    raylib::Vector2 actualMouseOffset = -mouseInitialOffset + body->position;
+    raylib::Vector2 actualMouseOffset = -initialPosition + body->position;
     SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
 
+    DrawText(("position: " + std::to_string(body->position.x) + " "
+      + std::to_string(body->position.y)).c_str(), 0, 0, 10, GOLD);
+
     DrawText(("velocity: " + std::to_string(velocity.x) + " "
-      + std::to_string(velocity.y)).c_str(), 0, 0, 10, GOLD);
+      + std::to_string(velocity.y)).c_str(), 0, 10, 10, GOLD);
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
@@ -390,7 +411,7 @@ public:
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body->position).Normalize());
 
       // create new projectile near the player
-      new Projectile(
+      auto newProjectile = new Projectile(
         "player bullet",
         GOLD,
         raylib::Vector2(10, 5),
@@ -400,13 +421,8 @@ public:
         damage,
         1
       );
+      newProjectile->init();
     }
-  }
-
-  void despawn() override
-  {
-    Subject::despawn();
-    delete (camera);
   }
 };
 
@@ -417,7 +433,7 @@ public:
     std::string name,
     raylib::Color color,
     raylib::Vector2 size,
-    raylib::Vector2 position,
+    raylib::Vector2 initialPosition,
     CollisionGroups scanningCollisionGroups,
     int health,
     int damage
@@ -426,48 +442,54 @@ public:
       name,
       color,
       size,
-      position,
+      initialPosition,
       {&hostileCollisionGroup},
       scanningCollisionGroups,
       health,
       damage
-    )
-  {
-
-  }
+    ) {}
 };
 
-std::vector<Enemy *> enemySpawner(
-  std::string name,
-  raylib::Color color,
-  raylib::Vector2 size,
-  CollisionGroups scanningCollisionGroups,
-  int health,
-  int damage,
-  int quantity
-)
+template <typename EntityType>
+std::vector<EntityType *> *entitySpawner(const int quantity, EntityType entity)
 {
-  std::vector<Enemy *> enemies;
+  class spawnedEntity : public EntityType
+  {
+  private:
+    std::vector<EntityType *> *spawnedEntities;
+
+  public:
+    spawnedEntity(
+      const EntityType &entity,
+      std::vector<EntityType *> *spawnedEntities
+    ) :
+      EntityType(entity),
+      spawnedEntities(spawnedEntities) {}
+
+    void deinit() override
+    {
+      EntityType::deinit();
+      auto position = std::find(spawnedEntities->begin(), spawnedEntities->end(), this);
+      spawnedEntities->erase(position);
+      delete this;
+    }
+  };
+
+  auto *spawnedEntities = new std::vector<EntityType *>;
 
   for (int i = 0; i < quantity; ++i)
   {
-    Enemy *newEnemy = new Enemy(
-      name,
-      color,
-      size,
-      raylib::Vector2(200 + 300 * i, 300),
-      scanningCollisionGroups,
-      health,
-      damage
+    auto *newEnemy = new spawnedEntity(
+      entity,
+      spawnedEntities
     );
 
-    std::cout << newEnemy->shape.x << " " << newEnemy->shape.y << std::endl;
-    std::cout << newEnemy->body->position.x << " " << newEnemy->body->position.y << std::endl;
-    enemies.push_back(newEnemy);
+    newEnemy->init();
+    spawnedEntities->push_back(newEnemy);
   }
 
-  return enemies;
-}
+  return spawnedEntities;
+};
 
 int main()
 {
@@ -483,16 +505,25 @@ int main()
     10,
     2
   );
+  player.init();
 
-  auto enemies = enemySpawner(
-    "enemy",
-    RED,
-    raylib::Vector2(100, 150),
-    {&playerCollisionGroup, &environmentCollisionGroup},
-    10,
-    2,
-    1
+  auto *enemies = entitySpawner<Enemy>(
+    5,
+    {
+      "enemy",
+      RED,
+      raylib::Vector2(100, 150),
+      raylib::Vector2(0, 0),
+      {&playerCollisionGroup, &environmentCollisionGroup},
+      10,
+      2,
+    }
   );
+
+  for (auto &projectile : projectileList)
+  {
+    projectile->init();
+  }
 
   SetTargetFPS(60);
 
@@ -505,28 +536,13 @@ int main()
     ClearBackground(RAYWHITE);
     DrawFPS(screenDimension.x * 2 - 100, 0);
 
-    for (auto &projectile : projectileList)
-    {
-      projectile->spawn();
-      std::vector<Entity *> bodiesHit = projectile->getCollidedBodies();
-      DrawText(("num of bodiesHit: " + std::to_string(bodiesHit.size())).c_str(), 0, 60, 10, PINK);
-
-      if (!bodiesHit.empty())
-      {
-        std::cout << "not empty bro" << std::endl;
-        for (auto body : bodiesHit)
-        {
-          dynamic_cast<Subject *>(body)->takeDamage(projectile->damage);
-        }
-
-        projectile->despawn();
-      }
-    }
-
     player.spawn();
 
-    for (auto enemy : enemies)
+    for (auto enemy : *enemies)
       enemy->spawn();
+
+    for (auto &projectile : projectileList)
+      projectile->spawn();
 
     EndDrawing();
   }
