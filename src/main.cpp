@@ -35,7 +35,7 @@ raylib::Physics *physics;
 raylib::Camera2D *camera;
 
 template <typename EntityType>
-std::vector<EntityType *> *entitySpawner(EntityType entity, const int quantity = 1)
+std::vector<EntityType *> *entitySpawner(EntityType entity, int quantity, std::vector<EntityType *> *spawnedEntities = new std::vector<EntityType *>)
 {
   class spawnedEntity : public EntityType
   {
@@ -58,8 +58,6 @@ std::vector<EntityType *> *entitySpawner(EntityType entity, const int quantity =
       delete this;
     }
   };
-
-  auto *spawnedEntities = new std::vector<EntityType *>;
 
   for (int i = 0; i < quantity; ++i)
   {
@@ -439,7 +437,7 @@ public:
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body->position).Normalize());
 
       // create new projectile near the player
-      auto newProjectile = (*entitySpawner<Projectile>(
+      entitySpawner<Projectile>(
         {
           "player bullet",
           GOLD,
@@ -449,11 +447,10 @@ public:
           normalizedDirection * projectileSpeed,
           damage,
           1
-        }
-      ))[0];
-
-      // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
-      projectileList.push_back(newProjectile);
+        },
+        1,
+        &projectileList
+      );
     }
 
     for (auto projectile : projectileList)
@@ -483,6 +480,23 @@ public:
       health,
       damage
     ) {}
+
+  void update() override
+  {
+    Subject::update();
+
+    if (!playerCollisionGroup.empty())
+    {
+      const auto player = dynamic_cast<Player *>(playerCollisionGroup[0]);
+      const auto distanceToPlayer = raylib::Vector2(player->body->position).Distance(body->position);
+
+      if (distanceToPlayer <= 1000)
+      {
+        const auto angleToPlayer = (raylib::Vector2(player->body->position) - body->position).Normalize();
+        Subject::accelerate(angleToPlayer, 0.3, 10.0);
+      }
+    }
+  }
 };
 
 int main()
@@ -511,7 +525,7 @@ int main()
       10,
       2,
     },
-    4
+    1
   );
 
   SetTargetFPS(60);
