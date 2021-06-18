@@ -29,13 +29,51 @@ CollisionGroup hostileCollisionGroup;
 CollisionGroup environmentCollisionGroup;
 CollisionGroup projectileCollisionGroup;
 
-// projectiles are created in the heap dynamically, this is used to store their pointers and loop through to spawn them
-std::vector<Projectile *> projectileList;
-
 // pointer to the physics simulation initialization that will be used for all `PhysicsBody`s
 raylib::Physics *physics;
 // pointer to main camera object created inside the player class that will be used to render things properly
 raylib::Camera2D *camera;
+
+template <typename EntityType>
+std::vector<EntityType *> *entitySpawner(EntityType entity, const int quantity = 1)
+{
+  class spawnedEntity : public EntityType
+  {
+  private:
+    std::vector<EntityType *> *spawnedEntities;
+
+  public:
+    spawnedEntity(
+      const EntityType &entity,
+      std::vector<EntityType *> *spawnedEntities
+    ) :
+      EntityType(entity),
+      spawnedEntities(spawnedEntities) {}
+
+    void deinit() override
+    {
+      EntityType::deinit();
+      auto position = std::find(spawnedEntities->begin(), spawnedEntities->end(), this);
+      spawnedEntities->erase(position);
+      delete this;
+    }
+  };
+
+  auto *spawnedEntities = new std::vector<EntityType *>;
+
+  for (int i = 0; i < quantity; ++i)
+  {
+    auto *newEnemy = new spawnedEntity(
+      entity,
+      spawnedEntities
+    );
+
+    newEnemy->init();
+    spawnedEntities->push_back(newEnemy);
+  }
+
+  return spawnedEntities;
+};
 
 class Entity
 {
@@ -298,10 +336,9 @@ public:
   void init() override
   {
     DynamicEntity::init();
+
     // record the time when the projectile is constructed to be used for despawning
     spawnStartTime = clock();
-    // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
-    projectileList.push_back(this);
   }
 
   void update() override
@@ -313,11 +350,8 @@ public:
 
     if (!bodiesHit.empty())
     {
-      std::cout << "not empty bro" << std::endl;
       for (auto body : bodiesHit)
-      {
         dynamic_cast<Subject *>(body)->takeDamage(damage);
-      }
 
       deinit();
     }
@@ -329,18 +363,12 @@ public:
     if (timePassed >= lifetime)
       deinit();
   }
-
-  void deinit() override
-  {
-    DynamicEntity::deinit();
-    // loop through and remove self from `projectileList`, and delete its memory allocation, and will no longer be rendered
-    auto position = std::find(projectileList.begin(), projectileList.end(), this);
-    projectileList.erase(position);
-  }
 };
 
 class Player : public Subject
 {
+private:
+  std::vector<Projectile *> projectileList;
 public:
   Player(
     std::string name,
@@ -411,18 +439,25 @@ public:
       raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body->position).Normalize());
 
       // create new projectile near the player
-      auto newProjectile = new Projectile(
-        "player bullet",
-        GOLD,
-        raylib::Vector2(10, 5),
-        body->position,
-        {&hostileCollisionGroup},
-        normalizedDirection * projectileSpeed,
-        damage,
-        1
-      );
-      newProjectile->init();
+      auto newProjectile = (*entitySpawner<Projectile>(
+        {
+          "player bullet",
+          GOLD,
+          raylib::Vector2(10, 5),
+          body->position,
+          {&hostileCollisionGroup},
+          normalizedDirection * projectileSpeed,
+          damage,
+          1
+        }
+      ))[0];
+
+      // since projectile will be created in the heap, it needs to be stored outside of the place where it will be constructed
+      projectileList.push_back(newProjectile);
     }
+
+    for (auto projectile : projectileList)
+      projectile->spawn();
   }
 };
 
@@ -450,47 +485,6 @@ public:
     ) {}
 };
 
-template <typename EntityType>
-std::vector<EntityType *> *entitySpawner(const int quantity, EntityType entity)
-{
-  class spawnedEntity : public EntityType
-  {
-  private:
-    std::vector<EntityType *> *spawnedEntities;
-
-  public:
-    spawnedEntity(
-      const EntityType &entity,
-      std::vector<EntityType *> *spawnedEntities
-    ) :
-      EntityType(entity),
-      spawnedEntities(spawnedEntities) {}
-
-    void deinit() override
-    {
-      EntityType::deinit();
-      auto position = std::find(spawnedEntities->begin(), spawnedEntities->end(), this);
-      spawnedEntities->erase(position);
-      delete this;
-    }
-  };
-
-  auto *spawnedEntities = new std::vector<EntityType *>;
-
-  for (int i = 0; i < quantity; ++i)
-  {
-    auto *newEnemy = new spawnedEntity(
-      entity,
-      spawnedEntities
-    );
-
-    newEnemy->init();
-    spawnedEntities->push_back(newEnemy);
-  }
-
-  return spawnedEntities;
-};
-
 int main()
 {
   InitWindow(screenDimension.x, screenDimension.y, "raylib game - Henry Liu");
@@ -508,7 +502,6 @@ int main()
   player.init();
 
   auto *enemies = entitySpawner<Enemy>(
-    5,
     {
       "enemy",
       RED,
@@ -517,13 +510,9 @@ int main()
       {&playerCollisionGroup, &environmentCollisionGroup},
       10,
       2,
-    }
+    },
+    4
   );
-
-  for (auto &projectile : projectileList)
-  {
-    projectile->init();
-  }
 
   SetTargetFPS(60);
 
@@ -540,9 +529,6 @@ int main()
 
     for (auto enemy : *enemies)
       enemy->spawn();
-
-    for (auto &projectile : projectileList)
-      projectile->spawn();
 
     EndDrawing();
   }
