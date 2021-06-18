@@ -408,12 +408,16 @@ public:
     Subject::init();
 
     // The initial player position offset from the viewport origin, which will be used to calculate global mouse position, or the mouse position relational to the view port origin
+    raylib::Vector2 playerOffset = screenDimension / 2.0 - raylib::Vector2(size) / 2.0;
+
     camera = new raylib::Camera2D(
-      screenDimension / 2.0 - raylib::Vector2(size) / 2.0,
+      playerOffset,
       raylib::Vector2(0, 0),
       0.0,
       1.0
     );
+
+    SetMouseOffset(-playerOffset.x, -playerOffset.y);
   }
 
   void update() override
@@ -436,22 +440,14 @@ public:
     // camera follows player
     camera->target = body->position;
 
-    // find and set the actual global mouse position offset relational to viewport origin by subtracting player offset from viewport origin
-    raylib::Vector2 actualMouseOffset = -initialPosition + body->position;
-    SetMouseOffset(actualMouseOffset.x, actualMouseOffset.y);
-
-    DrawText(("position: " + std::to_string(body->position.x) + " "
-      + std::to_string(body->position.y)).c_str(), 0, 0, 10, GOLD);
-
-    DrawText(("velocity: " + std::to_string(velocity.x) + " "
-      + std::to_string(velocity.y)).c_str(), 0, 10, 10, GOLD);
-
+    DrawText(("position: " + std::to_string(body->position.x) + " " + std::to_string(body->position.y)).c_str(), 0, 0, 10, GOLD);
+    DrawText(("velocity: " + std::to_string(velocity.x) + " " + std::to_string(velocity.y)).c_str(), 0, 10, 10, GOLD);
     DrawText(("health: " + std::to_string(health)).c_str(), 0, 20, 10, RED);
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
       // find the direction in form of vector of the direction of mouse click relational to the player
-      raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition()) - body->position).Normalize());
+      raylib::Vector2 normalizedDirection((raylib::Vector2(GetMousePosition())).Normalize());
 
       // create new projectile near the player
       entitySpawner<Projectile>(
