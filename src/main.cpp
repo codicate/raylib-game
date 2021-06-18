@@ -75,10 +75,8 @@ std::vector<EntityType *> *entitySpawner(EntityType entity, int quantity, std::v
 
 class Entity
 {
-private:
-  bool alive = true;
-
 public:
+  bool isAlive = true;
   std::string name;
   raylib::Color color;
   raylib::Vector2 size;
@@ -137,7 +135,7 @@ public:
 
   virtual void spawn()
   {
-    if (alive)
+    if (isAlive)
     {
       // render the entity on screen, reactive to camera position and will move in and out of viewport
       BeginMode2D(*camera);
@@ -158,7 +156,7 @@ public:
       belongingCollisionGroup->erase(position);
     }
 
-    alive = false;
+    isAlive = false;
   }
 };
 
@@ -359,8 +357,6 @@ public:
     DynamicEntity::update();
 
     std::vector<Entity *> bodiesHit = Entity::getCollidedBodies();
-    DrawText(("num of bodiesHit: " + std::to_string(bodiesHit.size())).c_str(), 0, 60, 10, PINK);
-
     if (!bodiesHit.empty())
     {
       for (auto body : bodiesHit)
@@ -452,6 +448,8 @@ public:
     DrawText(("velocity: " + std::to_string(velocity.x) + " "
       + std::to_string(velocity.y)).c_str(), 0, 10, 10, GOLD);
 
+    DrawText(("health: " + std::to_string(health)).c_str(), 0, 20, 10, RED);
+
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
     {
       // find the direction in form of vector of the direction of mouse click relational to the player
@@ -481,6 +479,10 @@ public:
 
 class Enemy : public Subject
 {
+private:
+  int isInCooldown = false;
+  std::clock_t lastAttackTime = clock();
+
 public:
   Enemy(
     std::string name,
@@ -512,6 +514,23 @@ public:
   {
     Subject::update();
 
+    float timePassed = (clock() - lastAttackTime) / (float) CLOCKS_PER_SEC;
+    if (timePassed >= 1)
+      isInCooldown = false;
+
+    if (!isInCooldown)
+    {
+      std::vector<Entity *> bodiesHit = Entity::getCollidedBodies();
+      if (!bodiesHit.empty())
+      {
+        for (auto body : bodiesHit)
+          dynamic_cast<Subject *>(body)->takeDamage(damage);
+
+        isInCooldown = true;
+        lastAttackTime = clock();
+      }
+    }
+
     if (!playerCollisionGroup.empty())
     {
       const auto player = dynamic_cast<Player *>(playerCollisionGroup[0]);
@@ -526,6 +545,18 @@ public:
   }
 };
 
+void DrawCenteredText(const char *text, int fontSize, raylib::Color color)
+{
+  int centerOffset = MeasureText(text, fontSize);
+  DrawText(
+    text,
+    screenDimension.x / 2 + centerOffset,
+    screenDimension.y / 2 + centerOffset / 2.0 + fontSize,
+    fontSize,
+    color
+  );
+}
+
 int main()
 {
   InitWindow(screenDimension.x, screenDimension.y, "raylib game - Henry Liu");
@@ -536,7 +567,7 @@ int main()
     BLUE,
     raylib::Vector2(100, 150),
     raylib::Vector2(200, 100),
-    {&hostileCollisionGroup, &environmentCollisionGroup},
+    {&hostileCollisionGroup},
     0.7,
     1.5,
     20.0,
@@ -551,7 +582,7 @@ int main()
       RED,
       raylib::Vector2(100, 150),
       raylib::Vector2(0, 0),
-      {&playerCollisionGroup, &environmentCollisionGroup},
+      {&playerCollisionGroup},
       0.2,
       1.0,
       10.0,
@@ -573,6 +604,9 @@ int main()
     DrawFPS(screenDimension.x * 2 - 100, 0);
 
     player.spawn();
+
+    if (!player.isAlive)
+      DrawCenteredText("YOU DIED", 40, RED);
 
     for (auto enemy : *enemies)
       enemy->spawn();
