@@ -367,8 +367,6 @@ public:
 
     // Find the time passed since the projectile was first constructed
     float timePassed = (clock() - spawnStartTime) / (float) CLOCKS_PER_SEC;
-    DrawText(("num of projectile: " + std::to_string(projectileCollisionGroup.size())).c_str(), 0, 50, 10, PINK);
-
     if (timePassed >= lifetime)
       deinit();
   }
@@ -411,8 +409,8 @@ public:
 
     // The initial player position offset from the viewport origin, which will be used to calculate global mouse position, or the mouse position relational to the view port origin
     camera = new raylib::Camera2D(
-      initialPosition,
-      screenDimension / 2.0,
+      screenDimension / 2.0 - raylib::Vector2(size) / 2.0,
+      raylib::Vector2(0, 0),
       0.0,
       1.0
     );
@@ -536,7 +534,7 @@ public:
       const auto player = dynamic_cast<Player *>(playerCollisionGroup[0]);
       const auto distanceToPlayer = raylib::Vector2(player->body->position).Distance(body->position);
 
-      if (distanceToPlayer <= 1000)
+      if (distanceToPlayer <= 400)
       {
         const auto angleToPlayer = (raylib::Vector2(player->body->position) - body->position).Normalize();
         Subject::accelerate(angleToPlayer, acceleration, maxSpeed);
@@ -566,7 +564,7 @@ int main()
     "player",
     BLUE,
     raylib::Vector2(100, 150),
-    raylib::Vector2(200, 100),
+    raylib::Vector2(0, 0),
     {&hostileCollisionGroup},
     0.7,
     1.5,
@@ -581,7 +579,7 @@ int main()
       "enemy",
       RED,
       raylib::Vector2(100, 150),
-      raylib::Vector2(0, 0),
+      raylib::Vector2(300, 300),
       {&playerCollisionGroup},
       0.2,
       1.0,
@@ -606,7 +604,7 @@ int main()
     player.spawn();
 
     if (!player.isAlive)
-      DrawCenteredText("YOU DIED", 40, RED);
+      DrawCenteredText("YOU DIED!", 40, RED);
 
     for (auto enemy : *enemies)
       enemy->spawn();
