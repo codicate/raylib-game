@@ -534,10 +534,14 @@ public:
       const auto player = dynamic_cast<Player *>(playerCollisionGroup[0]);
       const auto distanceToPlayer = raylib::Vector2(player->body->position).Distance(body->position);
 
-      if (distanceToPlayer <= 400)
+      if (distanceToPlayer <= 800)
       {
         const auto angleToPlayer = (raylib::Vector2(player->body->position) - body->position).Normalize();
         Subject::accelerate(angleToPlayer, acceleration, maxSpeed);
+      }
+      else
+      {
+        Subject::decelerate(deceleration);
       }
     }
   }
